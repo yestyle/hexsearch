@@ -3,6 +3,7 @@ use regex::bytes::RegexBuilder;
 use std::{
     fs::File,
     io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom},
+    process::exit,
 };
 
 fn search_regex(file: &File, pattern: &str) -> Result<u64, io::Error> {
@@ -61,7 +62,13 @@ fn main() {
     let bytes = matches.get_one::<String>("bytes").unwrap();
     let split = bytes.split_whitespace();
     let mut pattern = String::new();
-    split.for_each(|byte| pattern += &(String::from(r"\x") + byte));
+    split.for_each(|byte| {
+        if u8::from_str_radix(byte, 16).is_err() {
+            eprintln!("{byte} isn't hexadecimal.");
+            exit(-1);
+        }
+        pattern += &(String::from(r"\x") + byte)
+    });
 
     let file = matches.get_one::<String>("file").unwrap();
     let file = match File::open(file) {
