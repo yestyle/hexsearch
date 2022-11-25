@@ -186,6 +186,18 @@ fn main() {
             let end = start + pattern.len() / 4;
             read_and_print_one_line(&mut file, line_offset, Range { start, end });
 
+            // print one more line if the pattern overlaps the line boundary
+            if end > G_LINE_WIDTH {
+                read_and_print_one_line(
+                    &mut file,
+                    line_offset + G_LINE_WIDTH,
+                    Range {
+                        start: 0,
+                        end: end - G_LINE_WIDTH,
+                    },
+                );
+            }
+
             println!();
         });
     } else {
