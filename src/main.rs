@@ -127,7 +127,7 @@ fn main() {
     }
 
     let file = matches.get_one::<String>("file").unwrap();
-    let file = match File::open(file) {
+    let mut file = match File::open(file) {
         Ok(image) => image,
         Err(err) => {
             eprintln!("Failed to open file {file}: {err}");
@@ -135,8 +135,31 @@ fn main() {
         }
     };
 
-    if let Ok(offset) = search_regex(&file, &pattern) {
-        println!("{offset:?}");
+    if let Ok(offsets) = search_regex(&file, &pattern) {
+        offsets.iter().for_each(|offset| {
+            println!("offset: {offset} ({offset:08x})");
+            let line_offset = offset - offset % 16;
+            let mut bytes = vec![0; 16];
+            file.seek(SeekFrom::Start(line_offset)).ok();
+            file.read_exact(&mut bytes[..]).ok();
+            print!("{line_offset:08x}");
+
+            for (i, byte) in bytes.iter().enumerate() {
+                if i % 8 == 0 {
+                    print!(" ");
+                }
+                print!(" {byte:02x}");
+            }
+            print!("  |");
+            for (_, byte) in bytes.iter().enumerate() {
+                if byte.is_ascii() && !byte.is_ascii_control() {
+                    print!("{}", *byte as char);
+                } else {
+                    print!(".");
+                }
+            }
+            println!("|\n");
+        });
     } else {
         eprintln!("Cannot find the bytes: {bytes}");
     }
