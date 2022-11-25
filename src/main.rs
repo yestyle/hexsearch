@@ -52,23 +52,69 @@ fn main() {
         .about("A utility to search arbitrary bytes in a file")
         .arg_required_else_help(true)
         .arg(
+            Arg::new("endian")
+                .short('e')
+                .long("endian")
+                .help("Specify the endianness of the bytes")
+                .value_parser(["big", "little"])
+                .default_value("big"),
+        )
+        .arg(
             Arg::new("bytes")
-                .help("Quoted bytes in hexadecimal format without 0x (e.g.: \"1f 8b 08\")")
+                .help("Quoted bytes in hexadecimal format either without 0x (e.g.: \"1f 8b 08\")\nor with 0x in one word and respect --endian argument (e.g.: -e little 0x088b1f)")
                 .required(true),
         )
         .arg(Arg::new("file").help("file to search").required(true))
         .get_matches();
 
-    let bytes = matches.get_one::<String>("bytes").unwrap();
-    let split = bytes.split_whitespace();
     let mut pattern = String::new();
-    split.for_each(|byte| {
+    let bytes = matches
+        .get_one::<String>("bytes")
+        .unwrap()
+        .trim()
+        .to_lowercase();
+
+    let check_byte_or_exit = |byte| {
         if u8::from_str_radix(byte, 16).is_err() {
-            eprintln!("{byte} isn't hexadecimal.");
+            eprintln!("{byte} isn't a hexadecimal byte.");
             exit(-1);
         }
-        pattern += &(String::from(r"\x") + byte)
-    });
+    };
+
+    // bytes in format "0x088b1f"
+    if bytes.starts_with("0x") {
+        // trim off "0x" first
+        let mut bytes = bytes[2..].to_string();
+        // prefix a '0' if the len isn't odd
+        if bytes.len() % 2 != 0 {
+            bytes.insert(0, '0');
+        }
+        assert!(bytes.len() % 2 == 0);
+        match bytes.len() {
+            2 => {
+                // a single byte, endianness doesn't matter
+                pattern = String::from(bytes);
+            }
+            _not_shorter_than_4 => {
+                for i in (0..bytes.len()).step_by(2) {
+                    let byte = &bytes[i..=i + 1];
+                    check_byte_or_exit(byte);
+                    // only need to swap bytes when it's litten-endian
+                    if matches.get_one::<String>("endian").unwrap() == "little" {
+                        pattern.insert_str(0, &(String::from(r"\x") + byte));
+                    } else {
+                        pattern += &(String::from(r"\x") + byte);
+                    }
+                }
+            }
+        }
+    } else {
+        // bytes in format "1f 8b 08"
+        bytes.split_whitespace().for_each(|byte| {
+            check_byte_or_exit(byte);
+            pattern += &(String::from(r"\x") + byte)
+        });
+    }
 
     let file = matches.get_one::<String>("file").unwrap();
     let file = match File::open(file) {
@@ -81,5 +127,7 @@ fn main() {
 
     if let Ok(offset) = search_regex(&file, &pattern) {
         println!("{offset}");
+    } else {
+        eprintln!("Cannot find the bytes: {bytes}");
     }
 }
