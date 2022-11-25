@@ -6,7 +6,7 @@ use std::{
     process::exit,
 };
 
-fn search_regex(file: &File, pattern: &str) -> Result<u64, io::Error> {
+fn search_regex(file: &File, pattern: &str) -> Result<Vec<u64>, io::Error> {
     let mut buff = BufReader::new(file);
     let mut bytes = vec![0; 1024];
     // Disable Unicode (\u flag) to search arbitrary (non-UTF-8) bytes
@@ -17,6 +17,7 @@ fn search_regex(file: &File, pattern: &str) -> Result<u64, io::Error> {
     };
 
     buff.seek(SeekFrom::Start(0))?;
+    let mut offsets = Vec::new();
     loop {
         match buff.read(&mut bytes) {
             Ok(read) => {
@@ -31,7 +32,9 @@ fn search_regex(file: &File, pattern: &str) -> Result<u64, io::Error> {
                     continue;
                 }
                 if let Some(m) = re.find(&bytes[..read]) {
-                    return Ok(buff.stream_position().unwrap() - (read - m.start()) as u64);
+                    offsets.extend_from_slice(&[
+                        buff.stream_position().unwrap() - (read - m.start()) as u64
+                    ]);
                 } else {
                     // overlap the search around the chunk boundaries
                     // in case the pattern locates across the boundary
@@ -44,7 +47,7 @@ fn search_regex(file: &File, pattern: &str) -> Result<u64, io::Error> {
         }
     }
 
-    Err(io::Error::from(ErrorKind::NotFound))
+    Ok(offsets)
 }
 
 fn main() {
@@ -133,7 +136,7 @@ fn main() {
     };
 
     if let Ok(offset) = search_regex(&file, &pattern) {
-        println!("{offset}");
+        println!("{offset:?}");
     } else {
         eprintln!("Cannot find the bytes: {bytes}");
     }
