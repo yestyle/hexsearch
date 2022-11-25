@@ -112,7 +112,14 @@ fn main() {
         // bytes in format "1f 8b 08"
         bytes.split_whitespace().for_each(|byte| {
             check_byte_or_exit(byte);
-            pattern += &(String::from(r"\x") + byte)
+            // prefix a '0' if the len isn't 2 for regex matching
+            // after checking the byte is a valid u8 hexadecimal,
+            // it's safe to check the len is 1 or not.
+            if byte.len() == 1 {
+                pattern += &(String::from(r"\x0") + byte);
+            } else {
+                pattern += &(String::from(r"\x") + byte);
+            }
         });
     }
 
