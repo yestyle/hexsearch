@@ -3,10 +3,11 @@ use regex::bytes::RegexBuilder;
 use std::{
     fs::File,
     io::{self, BufReader, ErrorKind, Read, Seek, SeekFrom},
+    ops::Range,
     process::exit,
 };
 
-fn search_regex(file: &File, pattern: &str) -> Result<Vec<u64>, io::Error> {
+fn search_regex(file: &File, pattern: &str) -> Result<Vec<usize>, io::Error> {
     let mut buff = BufReader::new(file);
     let mut bytes = vec![0; 1024];
     // Disable Unicode (\u flag) to search arbitrary (non-UTF-8) bytes
@@ -33,7 +34,7 @@ fn search_regex(file: &File, pattern: &str) -> Result<Vec<u64>, io::Error> {
                 }
                 if let Some(m) = re.find(&bytes[..read]) {
                     offsets.extend_from_slice(&[
-                        buff.stream_position().unwrap() - (read - m.start()) as u64
+                        buff.stream_position().unwrap() as usize - (read - m.start())
                     ]);
                 } else {
                     // overlap the search around the chunk boundaries
@@ -135,30 +136,57 @@ fn main() {
         }
     };
 
+    const G_VT_DEFAULT: &str = "\x1B[0m";
+    const G_VT_RED: &str = "\x1B[91m";
+    const G_LINE_WIDTH: usize = 16;
+
+    let read_and_print_one_line = |file: &mut File, line_offset: usize, range: Range<usize>| {
+        let mut bytes = vec![0; G_LINE_WIDTH];
+        file.seek(SeekFrom::Start(line_offset as u64)).ok();
+        file.read_exact(&mut bytes[..]).ok();
+
+        // header
+        print!("{line_offset:08x}");
+
+        // hexadecimal bytes
+        for (i, byte) in bytes.iter().enumerate() {
+            if i % 8 == 0 {
+                print!(" ");
+            }
+            if range.contains(&i) {
+                print!("{G_VT_RED}");
+            }
+            print!(" {byte:02x}",);
+            print!("{G_VT_DEFAULT}");
+        }
+
+        // chracters
+        print!("  |");
+        for (i, byte) in bytes.iter().enumerate() {
+            if range.contains(&i) {
+                print!("{G_VT_RED}");
+            }
+            if byte.is_ascii() && !byte.is_ascii_control() {
+                print!("{}", *byte as char,);
+            } else {
+                print!(".");
+            }
+            print!("{G_VT_DEFAULT}");
+        }
+        println!("|");
+    };
+
     if let Ok(offsets) = search_regex(&file, &pattern) {
         offsets.iter().for_each(|offset| {
             println!("offset: {offset} ({offset:08x})");
-            let line_offset = offset - offset % 16;
-            let mut bytes = vec![0; 16];
-            file.seek(SeekFrom::Start(line_offset)).ok();
-            file.read_exact(&mut bytes[..]).ok();
-            print!("{line_offset:08x}");
+            let line_offset = offset - offset % G_LINE_WIDTH;
 
-            for (i, byte) in bytes.iter().enumerate() {
-                if i % 8 == 0 {
-                    print!(" ");
-                }
-                print!(" {byte:02x}");
-            }
-            print!("  |");
-            for (_, byte) in bytes.iter().enumerate() {
-                if byte.is_ascii() && !byte.is_ascii_control() {
-                    print!("{}", *byte as char);
-                } else {
-                    print!(".");
-                }
-            }
-            println!("|\n");
+            let start = offset - line_offset;
+            // each byte in pattern is represented as 4 characters, e.g.: "\xAA"
+            let end = start + pattern.len() / 4;
+            read_and_print_one_line(&mut file, line_offset, Range { start, end });
+
+            println!();
         });
     } else {
         eprintln!("Cannot find the bytes: {bytes}");
