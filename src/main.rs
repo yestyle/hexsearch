@@ -87,7 +87,7 @@ fn main() {
     // bytes in format "0x088b1f"
     if bytes.starts_with("0x") {
         // trim off "0x" first
-        let mut bytes = bytes[2..].to_string();
+        let mut bytes = bytes.strip_prefix("0x").unwrap().to_string();
         // prefix a '0' if the len isn't odd
         if bytes.len() % 2 != 0 {
             bytes.insert(0, '0');
@@ -96,7 +96,7 @@ fn main() {
         match bytes.len() {
             2 => {
                 // a single byte, endianness doesn't matter
-                pattern = String::from(bytes);
+                pattern = bytes;
             }
             _not_shorter_than_4 => {
                 for i in (0..bytes.len()).step_by(2) {
