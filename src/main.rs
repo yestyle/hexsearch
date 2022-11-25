@@ -1,4 +1,4 @@
-use clap::{Arg, Command};
+use clap::{value_parser, Arg, Command};
 use regex::bytes::RegexBuilder;
 use std::{
     fs::File,
@@ -62,6 +62,13 @@ fn main() {
                 .help("Specify the endianness of the bytes")
                 .value_parser(["big", "little"])
                 .default_value("big"),
+        )
+        .arg(
+            Arg::new("context")
+                .short('c')
+                .long("context")
+                .value_parser(value_parser!(u8).range(1..=10))
+                .help("Show 1-10 lines of context bytes when pattern is found in the file"),
         )
         .arg(
             Arg::new("bytes")
@@ -140,10 +147,17 @@ fn main() {
     const G_VT_RED: &str = "\x1B[91m";
     const G_LINE_WIDTH: usize = 16;
 
+    let filelen = file.metadata().unwrap().len();
+
     let read_and_print_one_line = |file: &mut File, line_offset: usize, range: Range<usize>| {
         let mut bytes = vec![0; G_LINE_WIDTH];
-        file.seek(SeekFrom::Start(line_offset as u64)).ok();
-        file.read_exact(&mut bytes[..]).ok();
+        if file.seek(SeekFrom::Start(line_offset as u64)).is_err() {
+            return;
+        }
+        let read = file.read(&mut bytes[..]).unwrap_or_default();
+        if read == 0 {
+            return;
+        }
 
         // header
         print!("{line_offset:08x}");
@@ -156,7 +170,12 @@ fn main() {
             if range.contains(&i) {
                 print!("{G_VT_RED}");
             }
-            print!(" {byte:02x}",);
+            if i < read {
+                print!(" {byte:02x}");
+            } else {
+                // print spaces as place holder
+                print!("   ");
+            }
             print!("{G_VT_DEFAULT}");
         }
 
@@ -166,10 +185,14 @@ fn main() {
             if range.contains(&i) {
                 print!("{G_VT_RED}");
             }
-            if byte.is_ascii() && !byte.is_ascii_control() {
-                print!("{}", *byte as char,);
+            if i < read {
+                if byte.is_ascii() && !byte.is_ascii_control() {
+                    print!("{}", *byte as char,);
+                } else {
+                    print!(".");
+                }
             } else {
-                print!(".");
+                print!(" ");
             }
             print!("{G_VT_DEFAULT}");
         }
@@ -177,17 +200,32 @@ fn main() {
     };
 
     if let Ok(offsets) = search_regex(&file, &pattern) {
+        let context = matches.get_one::<u8>("context").unwrap_or(&0);
+
         offsets.iter().for_each(|offset| {
             println!("offset: {offset} ({offset:08x})");
             let line_offset = offset - offset % G_LINE_WIDTH;
+
+            for i in (1..=*context).step_by(1).rev() {
+                if line_offset < G_LINE_WIDTH * i as usize {
+                    continue;
+                }
+                read_and_print_one_line(
+                    &mut file,
+                    line_offset - G_LINE_WIDTH * i as usize,
+                    Range::default(),
+                );
+            }
 
             let start = offset - line_offset;
             // each byte in pattern is represented as 4 characters, e.g.: "\xAA"
             let end = start + pattern.len() / 4;
             read_and_print_one_line(&mut file, line_offset, Range { start, end });
 
+            let mut plus = 0;
             // print one more line if the pattern overlaps the line boundary
             if end > G_LINE_WIDTH {
+                plus = 1;
                 read_and_print_one_line(
                     &mut file,
                     line_offset + G_LINE_WIDTH,
@@ -195,6 +233,20 @@ fn main() {
                         start: 0,
                         end: end - G_LINE_WIDTH,
                     },
+                );
+            }
+
+            for i in (1 + plus..=*context + plus).step_by(1) {
+                // only check the start offset of the line
+                // and let read_and_print_one_line() handle the end offset of this line
+                if line_offset + G_LINE_WIDTH * i as usize >= filelen as usize {
+                    println!("(EOF)");
+                    break;
+                }
+                read_and_print_one_line(
+                    &mut file,
+                    line_offset + G_LINE_WIDTH * i as usize,
+                    Range::default(),
                 );
             }
 
