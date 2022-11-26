@@ -134,6 +134,7 @@ fn main() {
         });
     }
 
+    // TODO: add support of reading stdin
     let file = matches.get_one::<String>("file").unwrap();
     let mut file = match File::open(file) {
         Ok(image) => image,
@@ -164,7 +165,7 @@ fn main() {
 
         // hexadecimal bytes
         for (i, byte) in bytes.iter().enumerate() {
-            if i % 8 == 0 {
+            if i % (G_LINE_WIDTH / 2) == 0 {
                 print!(" ");
             }
             if range.contains(&i) {
@@ -223,6 +224,7 @@ fn main() {
             read_and_print_one_line(&mut file, line_offset, Range { start, end });
 
             let mut plus = 0;
+            // TODO: calculate how many lines the pattern overlaps
             // print one more line if the pattern overlaps the line boundary
             if end > G_LINE_WIDTH {
                 plus = 1;
