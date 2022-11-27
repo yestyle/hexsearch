@@ -7,6 +7,10 @@ use std::{
     process::exit,
 };
 
+const G_VT_DEFAULT: &str = "\x1B[0m";
+const G_VT_RED: &str = "\x1B[91m";
+const G_LINE_WIDTH: usize = 16;
+
 fn search_regex(file: &File, pattern: &str) -> Result<Vec<usize>, io::Error> {
     let mut buff = BufReader::new(file);
     let mut bytes = vec![0; 1024];
@@ -49,6 +53,56 @@ fn search_regex(file: &File, pattern: &str) -> Result<Vec<usize>, io::Error> {
     }
 
     Ok(offsets)
+}
+
+fn read_and_print_one_line(file: &mut File, line_offset: usize, range: Range<usize>) {
+    let mut bytes = vec![0; G_LINE_WIDTH];
+    if file.seek(SeekFrom::Start(line_offset as u64)).is_err() {
+        return;
+    }
+    let read = file.read(&mut bytes[..]).unwrap_or_default();
+    if read == 0 {
+        return;
+    }
+
+    // header
+    print!("{line_offset:08x}");
+
+    // hexadecimal bytes
+    for (i, byte) in bytes.iter().enumerate() {
+        if i % (G_LINE_WIDTH / 2) == 0 {
+            print!(" ");
+        }
+        if range.contains(&i) {
+            print!("{G_VT_RED}");
+        }
+        if i < read {
+            print!(" {byte:02x}");
+        } else {
+            // print spaces as place holder
+            print!("   ");
+        }
+        print!("{G_VT_DEFAULT}");
+    }
+
+    // chracters
+    print!("  |");
+    for (i, byte) in bytes.iter().enumerate() {
+        if range.contains(&i) {
+            print!("{G_VT_RED}");
+        }
+        if i < read {
+            if byte.is_ascii() && !byte.is_ascii_control() {
+                print!("{}", *byte as char,);
+            } else {
+                print!(".");
+            }
+        } else {
+            print!(" ");
+        }
+        print!("{G_VT_DEFAULT}");
+    }
+    println!("|");
 }
 
 fn main() {
@@ -144,61 +198,7 @@ fn main() {
         }
     };
 
-    const G_VT_DEFAULT: &str = "\x1B[0m";
-    const G_VT_RED: &str = "\x1B[91m";
-    const G_LINE_WIDTH: usize = 16;
-
     let filelen = file.metadata().unwrap().len();
-
-    let read_and_print_one_line = |file: &mut File, line_offset: usize, range: Range<usize>| {
-        let mut bytes = vec![0; G_LINE_WIDTH];
-        if file.seek(SeekFrom::Start(line_offset as u64)).is_err() {
-            return;
-        }
-        let read = file.read(&mut bytes[..]).unwrap_or_default();
-        if read == 0 {
-            return;
-        }
-
-        // header
-        print!("{line_offset:08x}");
-
-        // hexadecimal bytes
-        for (i, byte) in bytes.iter().enumerate() {
-            if i % (G_LINE_WIDTH / 2) == 0 {
-                print!(" ");
-            }
-            if range.contains(&i) {
-                print!("{G_VT_RED}");
-            }
-            if i < read {
-                print!(" {byte:02x}");
-            } else {
-                // print spaces as place holder
-                print!("   ");
-            }
-            print!("{G_VT_DEFAULT}");
-        }
-
-        // chracters
-        print!("  |");
-        for (i, byte) in bytes.iter().enumerate() {
-            if range.contains(&i) {
-                print!("{G_VT_RED}");
-            }
-            if i < read {
-                if byte.is_ascii() && !byte.is_ascii_control() {
-                    print!("{}", *byte as char,);
-                } else {
-                    print!(".");
-                }
-            } else {
-                print!(" ");
-            }
-            print!("{G_VT_DEFAULT}");
-        }
-        println!("|");
-    };
 
     if let Ok(offsets) = search_regex(&file, &pattern) {
         let context = matches.get_one::<u8>("context").unwrap_or(&0);
