@@ -207,6 +207,7 @@ fn main() {
             println!("offset: {offset} ({offset:08x})");
             let line_offset = offset - offset % G_LINE_WIDTH;
 
+            // print before-context lines
             for i in (1..=*context).step_by(1).rev() {
                 if line_offset < G_LINE_WIDTH * i as usize {
                     continue;
@@ -218,27 +219,53 @@ fn main() {
                 );
             }
 
-            let start = offset - line_offset;
             // each byte in pattern is represented as 4 characters, e.g.: "\xAA"
-            let end = start + pattern.len() / 4;
-            read_and_print_one_line(&mut file, line_offset, Range { start, end });
+            let bytes = pattern.len() / 4;
+            let byte_offset_start = offset % G_LINE_WIDTH;
+            // byte_offset_end is the offset of ending color byte (exclusive) in its own line,
+            // which might be different from the line of byte_offset_start
+            let byte_offset_end = (byte_offset_start + bytes) % G_LINE_WIDTH;
+            // when pattern ends at the end of the line, set the byte_offset_end to line width
+            // so that printing function can work properly
+            let byte_offset_end = if byte_offset_end == 0 {
+                G_LINE_WIDTH
+            } else {
+                byte_offset_end
+            };
 
-            let mut plus = 0;
-            // TODO: calculate how many lines the pattern overlaps
-            // print one more line if the pattern overlaps the line boundary
-            if end > G_LINE_WIDTH {
-                plus = 1;
+            // calculate how many lines the pattern overlaps
+            let color_lines = {
+                // not start at the line beginning and overlap the line ending
+                let (start_line, remaining_bytes) = if byte_offset_start % G_LINE_WIDTH != 0
+                    && byte_offset_start + bytes > G_LINE_WIDTH
+                {
+                    (1, bytes - (G_LINE_WIDTH - byte_offset_start))
+                } else {
+                    (0, bytes)
+                };
+
+                start_line + (remaining_bytes + G_LINE_WIDTH - 1) / G_LINE_WIDTH
+            };
+            // print color lines
+            for i in (0..color_lines).step_by(1) {
                 read_and_print_one_line(
                     &mut file,
-                    line_offset + G_LINE_WIDTH,
+                    line_offset + G_LINE_WIDTH * i,
                     Range {
-                        start: 0,
-                        end: end - G_LINE_WIDTH,
+                        start: if i == 0 { byte_offset_start } else { 0 },
+                        end: if i == color_lines - 1 {
+                            byte_offset_end
+                        } else {
+                            G_LINE_WIDTH
+                        },
                     },
-                );
+                )
             }
 
-            for i in (1 + plus..=*context + plus).step_by(1) {
+            // move line_offset pointing to next line of color lines
+            let line_offset = line_offset + G_LINE_WIDTH * color_lines;
+            // print after-context lines
+            for i in (0..*context).step_by(1) {
                 // only check the start offset of the line
                 // and let read_and_print_one_line() handle the end offset of this line
                 if line_offset + G_LINE_WIDTH * i as usize >= filelen as usize {
