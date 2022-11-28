@@ -9,7 +9,6 @@ use std::{
 
 const G_VT_DEFAULT: &str = "\x1B[0m";
 const G_VT_RED: &str = "\x1B[91m";
-const G_LINE_WIDTH: usize = 16;
 
 fn search_regex(file: &File, pattern: &str) -> Result<Vec<usize>, io::Error> {
     let mut buff = BufReader::new(file);
@@ -55,8 +54,13 @@ fn search_regex(file: &File, pattern: &str) -> Result<Vec<usize>, io::Error> {
     Ok(offsets)
 }
 
-fn read_and_print_one_line(file: &mut File, line_offset: usize, range: Range<usize>) {
-    let mut bytes = vec![0; G_LINE_WIDTH];
+fn read_and_print_one_line(
+    file: &mut File,
+    line_width: usize,
+    line_offset: usize,
+    range: Range<usize>,
+) {
+    let mut bytes = vec![0; line_width];
     if file.seek(SeekFrom::Start(line_offset as u64)).is_err() {
         return;
     }
@@ -70,7 +74,7 @@ fn read_and_print_one_line(file: &mut File, line_offset: usize, range: Range<usi
 
     // hexadecimal bytes
     for (i, byte) in bytes.iter().enumerate() {
-        if i % (G_LINE_WIDTH / 2) == 0 {
+        if line_width != 1 && i % (line_width / 2) == 0 {
             print!(" ");
         }
         if range.contains(&i) {
@@ -123,6 +127,14 @@ fn main() {
                 .long("context")
                 .value_parser(value_parser!(u8).range(1..=10))
                 .help("Show 1-10 lines of context bytes when pattern is found in the file"),
+        )
+        .arg(
+            Arg::new("width")
+                .short('w')
+                .long("width")
+                .value_parser(value_parser!(u8).range(1..))
+                .default_value("16")
+                .help("Line width when printing the search result"),
         )
         .arg(
             Arg::new("bytes")
@@ -202,33 +214,36 @@ fn main() {
 
     if let Ok(offsets) = search_regex(&file, &pattern) {
         let context = matches.get_one::<u8>("context").unwrap_or(&0);
+        // width argument has default value so it's safe to unwrap
+        let line_width = *matches.get_one::<u8>("width").unwrap() as usize;
 
         offsets.iter().for_each(|offset| {
             println!("offset: {offset} ({offset:08x})");
-            let line_offset = offset - offset % G_LINE_WIDTH;
+            let line_offset = offset - offset % line_width;
 
             // print before-context lines
             for i in (1..=*context).step_by(1).rev() {
-                if line_offset < G_LINE_WIDTH * i as usize {
+                if line_offset < line_width * i as usize {
                     continue;
                 }
                 read_and_print_one_line(
                     &mut file,
-                    line_offset - G_LINE_WIDTH * i as usize,
+                    line_width,
+                    line_offset - line_width * i as usize,
                     Range::default(),
                 );
             }
 
             // each byte in pattern is represented as 4 characters, e.g.: "\xAA"
             let bytes = pattern.len() / 4;
-            let byte_offset_start = offset % G_LINE_WIDTH;
+            let byte_offset_start = offset % line_width;
             // byte_offset_end is the offset of ending color byte (exclusive) in its own line,
             // which might be different from the line of byte_offset_start
-            let byte_offset_end = (byte_offset_start + bytes) % G_LINE_WIDTH;
+            let byte_offset_end = (byte_offset_start + bytes) % line_width;
             // when pattern ends at the end of the line, set the byte_offset_end to line width
             // so that printing function can work properly
             let byte_offset_end = if byte_offset_end == 0 {
-                G_LINE_WIDTH
+                line_width
             } else {
                 byte_offset_end
             };
@@ -236,45 +251,47 @@ fn main() {
             // calculate how many lines the pattern overlaps
             let color_lines = {
                 // not start at the line beginning and overlap the line ending
-                let (start_line, remaining_bytes) = if byte_offset_start % G_LINE_WIDTH != 0
-                    && byte_offset_start + bytes > G_LINE_WIDTH
+                let (start_line, remaining_bytes) = if byte_offset_start % line_width != 0
+                    && byte_offset_start + bytes > line_width
                 {
-                    (1, bytes - (G_LINE_WIDTH - byte_offset_start))
+                    (1, bytes - (line_width - byte_offset_start))
                 } else {
                     (0, bytes)
                 };
 
-                start_line + (remaining_bytes + G_LINE_WIDTH - 1) / G_LINE_WIDTH
+                start_line + (remaining_bytes + line_width - 1) / line_width
             };
             // print color lines
             for i in (0..color_lines).step_by(1) {
                 read_and_print_one_line(
                     &mut file,
-                    line_offset + G_LINE_WIDTH * i,
+                    line_width,
+                    line_offset + line_width * i,
                     Range {
                         start: if i == 0 { byte_offset_start } else { 0 },
                         end: if i == color_lines - 1 {
                             byte_offset_end
                         } else {
-                            G_LINE_WIDTH
+                            line_width
                         },
                     },
                 )
             }
 
             // move line_offset pointing to next line of color lines
-            let line_offset = line_offset + G_LINE_WIDTH * color_lines;
+            let line_offset = line_offset + line_width * color_lines;
             // print after-context lines
             for i in (0..*context).step_by(1) {
                 // only check the start offset of the line
                 // and let read_and_print_one_line() handle the end offset of this line
-                if line_offset + G_LINE_WIDTH * i as usize >= filelen as usize {
+                if line_offset + line_width * i as usize >= filelen as usize {
                     println!("(EOF)");
                     break;
                 }
                 read_and_print_one_line(
                     &mut file,
-                    line_offset + G_LINE_WIDTH * i as usize,
+                    line_width,
+                    line_offset + line_width * i as usize,
                     Range::default(),
                 );
             }
