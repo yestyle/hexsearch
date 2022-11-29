@@ -111,7 +111,7 @@ fn read_and_print_one_line(
 
 fn main() {
     let matches = Command::new(env!("CARGO_BIN_NAME"))
-        .about("A utility to search arbitrary bytes in a file")
+        .about("A CLI utility to search arbitrary bytes in a file")
         .arg_required_else_help(true)
         .arg(
             Arg::new("endian")
