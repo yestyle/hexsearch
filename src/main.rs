@@ -51,7 +51,11 @@ fn search_regex(file: &File, pattern: &str) -> Result<Vec<usize>, io::Error> {
         }
     }
 
-    Ok(offsets)
+    if offsets.is_empty() {
+        Err(io::Error::from(ErrorKind::NotFound))
+    } else {
+        Ok(offsets)
+    }
 }
 
 fn read_and_print_one_line(
