@@ -8,6 +8,7 @@ use std::{
 };
 
 const G_VT_DEFAULT: &str = "\x1B[0m";
+const G_VT_BOLD: &str = "\x1B[1m";
 const G_VT_RED: &str = "\x1B[91m";
 
 fn search_regex(file: &File, pattern: &str) -> Result<Vec<usize>, io::Error> {
@@ -115,7 +116,7 @@ fn read_and_print_one_line(
 
 fn main() {
     let matches = Command::new(env!("CARGO_BIN_NAME"))
-        .about("A CLI utility to search arbitrary bytes in a file")
+        .about("A CLI utility to search arbitrary bytes in files")
         .arg_required_else_help(true)
         .arg(
             Arg::new("endian")
@@ -145,7 +146,7 @@ fn main() {
                 .help("Quoted bytes in hexadecimal format either without 0x (e.g.: \"1f 8b 08\")\nor with 0x in one word and respect --endian argument (e.g.: -e little 0x088b1f)")
                 .required(true),
         )
-        .arg(Arg::new("file").help("file to search").required(true))
+        .arg(Arg::new("files").help("files to search").required(true).num_args(1..))
         .get_matches();
 
     let mut pattern = String::new();
@@ -205,104 +206,107 @@ fn main() {
     }
 
     // TODO: add support of reading stdin
-    let file = matches.get_one::<String>("file").unwrap();
-    let mut file = match File::open(file) {
-        Ok(image) => image,
-        Err(err) => {
-            eprintln!("Failed to open file {file}: {err}");
-            return;
-        }
-    };
-
-    let filelen = file.metadata().unwrap().len();
-
-    if let Ok(offsets) = search_regex(&file, &pattern) {
-        let context = matches.get_one::<u8>("context").unwrap_or(&0);
-        // width argument has default value so it's safe to unwrap
-        let line_width = *matches.get_one::<u8>("width").unwrap() as usize;
-
-        offsets.iter().for_each(|offset| {
-            println!("offset: {offset} ({offset:08x})");
-            let line_offset = offset - offset % line_width;
-
-            // print before-context lines
-            for i in (1..=*context).step_by(1).rev() {
-                if line_offset < line_width * i as usize {
-                    continue;
-                }
-                read_and_print_one_line(
-                    &mut file,
-                    line_width,
-                    line_offset - line_width * i as usize,
-                    Range::default(),
-                );
+    let paths = matches.get_many::<String>("files").unwrap();
+    paths.for_each(|path| {
+        let mut file = match File::open(path) {
+            Ok(image) => image,
+            Err(err) => {
+                eprintln!("Failed to open file {path}: {err}");
+                return;
             }
+        };
 
-            // each byte in pattern is represented as 4 characters, e.g.: "\xAA"
-            let bytes = pattern.len() / 4;
-            let byte_offset_start = offset % line_width;
-            // byte_offset_end is the offset of ending color byte (exclusive) in its own line,
-            // which might be different from the line of byte_offset_start
-            let byte_offset_end = (byte_offset_start + bytes) % line_width;
-            // when pattern ends at the end of the line, set the byte_offset_end to line width
-            // so that printing function can work properly
-            let byte_offset_end = if byte_offset_end == 0 {
-                line_width
-            } else {
-                byte_offset_end
-            };
+        let filelen = file.metadata().unwrap().len();
 
-            // calculate how many lines the pattern overlaps
-            let color_lines = {
-                // not start at the line beginning and overlap the line ending
-                let (start_line, remaining_bytes) = if byte_offset_start % line_width != 0
-                    && byte_offset_start + bytes > line_width
-                {
-                    (1, bytes - (line_width - byte_offset_start))
+        println!("{G_VT_BOLD}{path}{G_VT_DEFAULT}:\n");
+        if let Ok(offsets) = search_regex(&file, &pattern) {
+            let context = matches.get_one::<u8>("context").unwrap_or(&0);
+            // width argument has default value so it's safe to unwrap
+            let line_width = *matches.get_one::<u8>("width").unwrap() as usize;
+
+            offsets.iter().for_each(|offset| {
+                println!("offset: {offset} ({offset:08x})");
+                let line_offset = offset - offset % line_width;
+
+                // print before-context lines
+                for i in (1..=*context).step_by(1).rev() {
+                    if line_offset < line_width * i as usize {
+                        continue;
+                    }
+                    read_and_print_one_line(
+                        &mut file,
+                        line_width,
+                        line_offset - line_width * i as usize,
+                        Range::default(),
+                    );
+                }
+
+                // each byte in pattern is represented as 4 characters, e.g.: "\xAA"
+                let bytes = pattern.len() / 4;
+                let byte_offset_start = offset % line_width;
+                // byte_offset_end is the offset of ending color byte (exclusive) in its own line,
+                // which might be different from the line of byte_offset_start
+                let byte_offset_end = (byte_offset_start + bytes) % line_width;
+                // when pattern ends at the end of the line, set the byte_offset_end to line width
+                // so that printing function can work properly
+                let byte_offset_end = if byte_offset_end == 0 {
+                    line_width
                 } else {
-                    (0, bytes)
+                    byte_offset_end
                 };
 
-                start_line + (remaining_bytes + line_width - 1) / line_width
-            };
-            // print color lines
-            for i in (0..color_lines).step_by(1) {
-                read_and_print_one_line(
-                    &mut file,
-                    line_width,
-                    line_offset + line_width * i,
-                    Range {
-                        start: if i == 0 { byte_offset_start } else { 0 },
-                        end: if i == color_lines - 1 {
-                            byte_offset_end
-                        } else {
-                            line_width
+                // calculate how many lines the pattern overlaps
+                let color_lines = {
+                    // not start at the line beginning and overlap the line ending
+                    let (start_line, remaining_bytes) = if byte_offset_start % line_width != 0
+                        && byte_offset_start + bytes > line_width
+                    {
+                        (1, bytes - (line_width - byte_offset_start))
+                    } else {
+                        (0, bytes)
+                    };
+
+                    start_line + (remaining_bytes + line_width - 1) / line_width
+                };
+                // print color lines
+                for i in (0..color_lines).step_by(1) {
+                    read_and_print_one_line(
+                        &mut file,
+                        line_width,
+                        line_offset + line_width * i,
+                        Range {
+                            start: if i == 0 { byte_offset_start } else { 0 },
+                            end: if i == color_lines - 1 {
+                                byte_offset_end
+                            } else {
+                                line_width
+                            },
                         },
-                    },
-                )
-            }
-
-            // move line_offset pointing to next line of color lines
-            let line_offset = line_offset + line_width * color_lines;
-            // print after-context lines
-            for i in (0..*context).step_by(1) {
-                // only check the start offset of the line
-                // and let read_and_print_one_line() handle the end offset of this line
-                if line_offset + line_width * i as usize >= filelen as usize {
-                    println!("(EOF)");
-                    break;
+                    )
                 }
-                read_and_print_one_line(
-                    &mut file,
-                    line_width,
-                    line_offset + line_width * i as usize,
-                    Range::default(),
-                );
-            }
 
-            println!();
-        });
-    } else {
-        eprintln!("Cannot find the bytes: {bytes}");
-    }
+                // move line_offset pointing to next line of color lines
+                let line_offset = line_offset + line_width * color_lines;
+                // print after-context lines
+                for i in (0..*context).step_by(1) {
+                    // only check the start offset of the line
+                    // and let read_and_print_one_line() handle the end offset of this line
+                    if line_offset + line_width * i as usize >= filelen as usize {
+                        println!("(EOF)");
+                        break;
+                    }
+                    read_and_print_one_line(
+                        &mut file,
+                        line_width,
+                        line_offset + line_width * i as usize,
+                        Range::default(),
+                    );
+                }
+
+                println!();
+            });
+        } else {
+            eprintln!("Cannot find the bytes: {bytes}\n");
+        }
+    });
 }

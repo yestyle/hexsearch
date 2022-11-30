@@ -1,6 +1,6 @@
 # hexsearch
 
-A CLI utility to search arbitrary bytes in a file, by leveraging the power of [regex](https://github.com/rust-lang/regex#usage-match-regular-expressions-on-u8) crate in Rust.
+A CLI utility to search arbitrary bytes in files, by leveraging the power of [regex](https://github.com/rust-lang/regex#usage-match-regular-expressions-on-u8) crate in Rust.
 
 ![](screenshot.png)
 
