@@ -1,7 +1,16 @@
 [package]
 name = "hexsearch"
 version = "0.1.0"
+description = "A CLI utility to search arbitrary bytes in files, by leveraging the power of regex crate in Rust."
+authors = ["Philip Ye <yestyle@gmail.com>"]
 edition = "2021"
+license-file = "LICENSE"
+categories = ["command-line-utilities"]
+keywords = ["hex", "hexadecimal", "search"]
+repository = "https://github.com/yestyle/hexsearch"
+homepage = "https://github.com/yestyle/hexsearch"
+documentation = "https://github.com/yestyle/hexsearch"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
