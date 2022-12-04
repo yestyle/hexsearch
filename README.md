@@ -28,3 +28,7 @@ The search result will be printed in a style similar to [hexdump(1)](https://www
 You can also print some extra lines before and after the search result by setting `--context` argument.
 
 See `hexsearch --help` for full usage.
+
+# License
+
+This project is licensed under [MIT license](LICENSE).
