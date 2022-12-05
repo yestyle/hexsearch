@@ -6,10 +6,10 @@ A CLI utility to search arbitrary bytes in files, by leveraging the power of [re
 
 # Install
 
-The following command will install `hexsearch` executable in `~/.cargo/bin` directory:
+This crate has been published onto [crates.io](https://crates.io/crates/hexsearch), so you can use the following command to install `hexsearch` executable to `~/.cargo/bin` directory:
 
 ```
-cargo install --path .
+cargo install hexsearch
 ```
 
 # Usage
