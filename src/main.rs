@@ -1,4 +1,4 @@
-use clap::{value_parser, Arg, Command};
+use clap::{crate_version, value_parser, Arg, Command};
 use regex::bytes::RegexBuilder;
 use std::{
     fs::File,
@@ -117,6 +117,7 @@ fn read_and_print_one_line(
 fn main() {
     let matches = Command::new(env!("CARGO_BIN_NAME"))
         .about("A CLI utility to search arbitrary bytes in files")
+        .version(crate_version!())
         .arg_required_else_help(true)
         .arg(
             Arg::new("endian")
