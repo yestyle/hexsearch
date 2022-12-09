@@ -36,15 +36,15 @@ fn search_regex(file: &File, pattern: &str) -> Result<Vec<usize>, io::Error> {
                     buff.seek(SeekFrom::End(pattern.len() as i64))?;
                     continue;
                 }
-                if let Some(m) = re.find(&bytes[..read]) {
+                // find all non-overlapping matches
+                for m in re.find_iter(&bytes[..read]) {
                     offsets.extend_from_slice(&[
                         buff.stream_position().unwrap() as usize - (read - m.start())
                     ]);
-                } else {
-                    // overlap the search around the chunk boundaries
-                    // in case the pattern locates across the boundary
-                    buff.seek(SeekFrom::Current(1 - pattern.len() as i64))?;
                 }
+                // overlap the search around the chunk boundaries
+                // in case the pattern locates across the boundary
+                buff.seek(SeekFrom::Current(1 - pattern.len() as i64))?;
             }
             Err(err) => {
                 return Err(err);
@@ -102,7 +102,7 @@ fn read_and_print_one_line(
         }
         if i < read {
             if byte.is_ascii() && !byte.is_ascii_control() {
-                print!("{}", *byte as char,);
+                print!("{}", *byte as char);
             } else {
                 print!(".");
             }

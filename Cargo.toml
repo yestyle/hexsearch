@@ -1,6 +1,6 @@
 [package]
 name = "hexsearch"
-version = "0.1.0"
+version = "0.1.1"
 description = "A CLI utility to search arbitrary bytes in files, by leveraging the power of regex crate in Rust."
 authors = ["Philip Ye <yestyle@gmail.com>"]
 edition = "2021"
