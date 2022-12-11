@@ -15,13 +15,15 @@ cargo install hexsearch
 # Usage
 
 ```
-hexsearch [OPTIONS] <bytes> <file>
+hexsearch [OPTIONS] <bytes> <files>
 ```
 
 The bytes to be searched can be in one of two formats:
 
 * individual bytes in hexadecimal separated by space: `1f 8b 08`
 * hexadecimal value in one word prefixed with 0x: `0x1f8b08`. This format will respect the `--endian` argument and it's big-endian by default
+
+Multiple files can be searched in one go by passing in paths separated by space.
 
 The search result will be printed in a style similar to [hexdump(1)](https://www.man7.org/linux/man-pages/man1/hexdump.1.html) and you can set the line width by `--width` argument (default width: 16).
 
