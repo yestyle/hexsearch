@@ -311,3 +311,15 @@ fn main() {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_search_regex() {
+        let file = File::open("tests/data/vmlinuz-6.4-x86_64").unwrap();
+        let offsets = search_regex(&file, r"\x1f\x8b\x08").unwrap();
+        assert_eq!(offsets, vec![0x0061bd72, 0x006b7b9e, 0x0085ab9f]);
+    }
+}
